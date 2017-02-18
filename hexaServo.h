@@ -36,17 +36,17 @@
  * Theorical home position is: 4096*(TMAX-TMIN)/TCLK = 4096*(2500-500)*50 = 307
  */
 #define _SERVOHOME0_ 304
-#define _SERVOHOME1_ 295
-#define _SERVOHOME2_ 288
-#define _SERVOHOME3_ 283
-#define _SERVOHOME4_ 394
-#define _SERVOHOME5_ 288
-#define _SERVOHOME6_ 333
-#define _SERVOHOME7_ 295
+#define _SERVOHOME1_ 385
+#define _SERVOHOME2_ 230
+#define _SERVOHOME3_ 307
+#define _SERVOHOME4_ 290
+#define _SERVOHOME5_ 302
+#define _SERVOHOME6_ 320
+#define _SERVOHOME7_ 307
 #define _SERVOHOME8_ 314
-#define _SERVOHOME9_ 291
-#define _SERVOHOME10_ 304
-#define _SERVOHOME11_ 295
+#define _SERVOHOME9_ 295
+#define _SERVOHOME10_ 310
+#define _SERVOHOME11_ 312
 
 /* Horizontal and vertical limit in term of duty cycle from home position */
 #define _PWMHMIN_ -57 
@@ -55,9 +55,12 @@
 #define _PWMVMAX_ 10 
 
 /* Break time between instruction for servo rotation */
-#define _STDBREAK_ 1000
+#define _STDBREAK_ 1
 
-/* Lenght or angle of one step and */
+/* Number of steps per instructions */
+#define _NBSTEPS_ 50
+
+/* Lenght or angle of one step */
 #define _STEPLENGHT_ 1
 #define _STEPANGLE_ 1
 

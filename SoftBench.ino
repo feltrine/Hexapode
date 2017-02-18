@@ -1,7 +1,8 @@
 #include "hexaWiFi.h"
 #include "hexaServo.h"
 
-/* test git commit */
+int g_hexaAngle;
+int g_hexaSpeed;
 
 void setup() 
 {
@@ -17,7 +18,9 @@ void setup()
   initWiFi();
   Serial.println();
   Serial.println( "WiFi access point established" );
-  
+
+  g_hexaAngle = 0;
+  g_hexaSpeed = 0;
   hexaServoInit();
   hexaHoming();
   delay(1000);
@@ -25,11 +28,10 @@ void setup()
   Serial.println();
   Serial.println( "Home position set" );
 
-  hexaToward( 5, 1, 0 );
+  //hexaMove( 5, 0, 1, 0 );
 }
 
 void loop() 
 {
-  //hexaHoming();
   waitInstr();
 }

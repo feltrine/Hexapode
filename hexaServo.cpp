@@ -1,6 +1,7 @@
 #include "hexaServo.h"
 
 Adafruit_PWMServoDriver g_pwm = Adafruit_PWMServoDriver();
+int g_hexaPos[12];
 
 int hexaServoMap( int index )
 {
@@ -68,18 +69,17 @@ void hexaServoInit()
 {
   g_pwm.begin();
   g_pwm.setPWMFreq( _PWMFREQ_ );
+  hexaHoming();
 }
 
 void hexaHoming()
 {
   int i;
 
-  g_pwm.setPWM( hexaServoMap( 1 ), 0, hexaServoHome( 1 ) );
-  g_pwm.setPWM( hexaServoMap( 3 ), 0, hexaServoHome( 3 ) );
-
   for( i = 0; i < 12; i++ )
   {
 	  g_pwm.setPWM( hexaServoMap( i ), 0, hexaServoHome( i ) );
+    g_hexaPos[ i ] = hexaServoHome( i );
   }
 }
 
@@ -95,32 +95,22 @@ void hexaSetPos( int index, int pos )
   if( 6 > index )
   {
     g_pwm.setPWM( hexaServoMap( index ), 0, hexaServoHome( index ) + pos );
-    Serial.print( "Servo " );
-    Serial.print( index );
-    Serial.print( " | Position: " );
-    Serial.print( hexaServoHome( index ) );
-    Serial.print( "+" );
-    Serial.println( pos );
-
+    g_hexaPos[ index ] = hexaServoHome( index ) + pos;
   }
   else
   {
     g_pwm.setPWM( hexaServoMap( index ), 0, hexaServoHome( index ) - pos );
-    Serial.print( "Servo " );
-    Serial.print( index );
-    Serial.print( " | Position: " );
-    Serial.print( hexaServoHome( index ) );
-    Serial.print( "-" );
-    Serial.println( pos );
+    g_hexaPos[ index ] = hexaServoHome( index ) - pos;
   }
-  delay(10);
+  delay( _STDBREAK_ );
 }
 
-void hexaToward( double lenght, double stepSize, int height )
+void hexaMove( double lenght, double curve, double stepSize, int height )
 {
-  int i, hexaFor, hexaBack, corrHeight;
-  double distance, corrStep;
+  int i, j, hexaFor, hexaBack, corrHeight, highLeg;
+  double d, distance, corrStep, curveLeft, curveRight;
 
+  /* Going forward or backward */
   if( 0 > lenght )
   {
     distance = -lenght;
@@ -134,6 +124,29 @@ void hexaToward( double lenght, double stepSize, int height )
     hexaBack = _PWMHMIN_;
   }
 
+  /* Determine the side which is modified to control the exentricity of the movement */
+  if( -1 > curve )
+  {
+    curveLeft = 0;
+    curveRight = 1;
+  }
+  else if( 0 > curve )
+  {
+    curveLeft = 0;
+    curveRight = -curve;
+  }
+  else if( 1 > curve )
+  {
+    curveLeft = curve;
+    curveRight = 0;
+  }
+  else
+  {
+    curveLeft = 1;
+    curveRight = 0;
+  }
+
+  /* Corection on step size to reduce speed */
   if( 0 > stepSize )
   {
     corrStep = 0;
@@ -147,6 +160,7 @@ void hexaToward( double lenght, double stepSize, int height )
     corrStep = stepSize;
   }
 
+  /* Setting height value */
   if( _PWMVMIN_ + _STDHEIGHT_ > height )
   {
     corrHeight = _PWMVMIN_ + _STDHEIGHT_;
@@ -160,6 +174,30 @@ void hexaToward( double lenght, double stepSize, int height )
     corrHeight = height;
   }
 
+  /* Determine which leg is high and cofirm home position */
+  if( g_hexaPos[0] > g_hexaPos[2] )
+  {
+    highLeg = 1;
+    for( i = 0; i < 3; i++)
+    {
+      hexaSetPos( 4 * i, corrHeight );
+      hexaSetPos( 4 * i + 1, 0 );
+      hexaSetPos( 4 * i + 2, corrHeight - _STDHEIGHT_ );
+      hexaSetPos( 4 * i + 3, 0 );
+    }
+  }
+  else
+  {
+    highLeg = 0;
+    for( i = 0; i < 3; i++ )
+    {
+      hexaSetPos( 4 * i, corrHeight - _STDHEIGHT_ );
+      hexaSetPos( 4 * i + 1, 0 );
+      hexaSetPos( 4 * i + 2, corrHeight );
+      hexaSetPos( 4 * i + 3, 0 );
+    }
+  }
+
   while( _ERRLENGHT_ * _STEPLENGHT_ < distance )
   {
     if( _STEPLENGHT_ * corrStep > distance )
@@ -168,46 +206,78 @@ void hexaToward( double lenght, double stepSize, int height )
     }
     distance -= _STEPLENGHT_ * corrStep;
 
-    for( i = 0; i < 3; i++ )
+    if( 0 != highLeg )
     {
-      hexaSetPos( 4 * i, corrHeight - _STDHEIGHT_ );
+      for( i = 0; i < _NBSTEPS_; i++ )
+      {
+        d = i * 1.0 /_NBSTEPS_;
+        for( j = 0; j < 3; j++ )
+        {
+          hexaSetPos( 4 * j + 2, corrHeight - int( ( 1 - d ) * _STDHEIGHT_ ) );
+        }
+        hexaSetPos( 1, int( d * hexaBack * corrStep * ( 1 - curveLeft ) ) );
+        hexaSetPos( 3, int( d * hexaFor * corrStep * ( 1 - curveLeft ) ) );
+        hexaSetPos( 5, int( d * hexaBack * corrStep * ( 1 - curveLeft ) ) );
+        hexaSetPos( 7, int( d * hexaFor * corrStep * ( 1 - curveRight ) ) );
+        hexaSetPos( 9, int( d * hexaBack * corrStep * ( 1 - curveRight ) ) );
+        hexaSetPos( 11, int( d * hexaFor * corrStep * ( 1 - curveRight ) ) );
+      }
+      for( i = _NBSTEPS_; i > 0; i-- )
+      {
+        d = i * 1.0 /_NBSTEPS_;
+     
+        for( j = 0; j < 3; j++ )
+        {
+          hexaSetPos( 4 * j, corrHeight - int( ( 1 - d ) * _STDHEIGHT_ ) );
+        }
+        hexaSetPos( 1, int( d * hexaBack * corrStep * ( 1 - curveLeft ) ) );
+        hexaSetPos( 3, int( d * hexaFor * corrStep * ( 1 - curveLeft ) ) );
+        hexaSetPos( 5, int( d * hexaBack * corrStep * ( 1 - curveLeft ) ) );
+        hexaSetPos( 7, int( d * hexaFor * corrStep * ( 1 - curveRight ) ) );
+        hexaSetPos( 9, int( d * hexaBack * corrStep * ( 1 - curveRight ) ) );
+        hexaSetPos( 11, int( d * hexaFor * corrStep * ( 1 - curveRight ) ) );
+      }
     }
-    delay( _STDBREAK_ );
-    for( i = 0; i < 3; i++ )
+    else
     {
-      hexaSetPos( 4 * i + 1, int( hexaFor * corrStep ) );
-      hexaSetPos( 4 * i + 3, int( hexaBack * corrStep ) );
+      for( i = 0; i < _NBSTEPS_; i++ )
+      {
+        d = i * 1.0 /_NBSTEPS_;
+        for( j = 0; j < 3; j++ )
+        {
+          hexaSetPos( 4 * j, corrHeight - int( ( 1 - d ) * _STDHEIGHT_ ) );
+        }
+        hexaSetPos( 1, int( d * hexaFor * corrStep * ( 1 - curveLeft ) ) );
+        hexaSetPos( 3, int( d * hexaBack * corrStep * ( 1 - curveLeft ) ) );
+        hexaSetPos( 5, int( d * hexaFor * corrStep * ( 1 - curveLeft ) ) );
+        hexaSetPos( 7, int( d * hexaBack * corrStep * ( 1 - curveRight ) ) );
+        hexaSetPos( 9, int( d * hexaFor * corrStep * ( 1 - curveRight ) ) );
+        hexaSetPos( 11, int( d * hexaBack * corrStep * ( 1 - curveRight ) ) );
+      }
+      for( i = _NBSTEPS_; i > 0; i-- )
+      {
+        d = i * 1.0 /_NBSTEPS_;
+     
+        for( j = 0; j < 3; j++ )
+        {
+          hexaSetPos( 4 * j + 2, corrHeight - int( ( 1 - d ) * _STDHEIGHT_ ) );
+        }
+        hexaSetPos( 1, int( d * hexaFor * corrStep * ( 1 - curveLeft ) ) );
+        hexaSetPos( 3, int( d * hexaBack * corrStep * ( 1 - curveLeft ) ) );
+        hexaSetPos( 5, int( d * hexaFor * corrStep * ( 1 - curveLeft ) ) );
+        hexaSetPos( 7, int( d * hexaBack * corrStep * ( 1 - curveRight ) ) );
+        hexaSetPos( 9, int( d * hexaFor * corrStep * ( 1 - curveRight ) ) );
+        hexaSetPos( 11, int( d * hexaBack * corrStep * ( 1 - curveRight ) ) );
+      }
     }
-    delay( _STDBREAK_ );
-    for( i = 0; i < 3; i++ )
-    {
-      hexaSetPos( 4 * i, corrHeight );
-    }
-    delay( _STDBREAK_ );
-
-    for( i = 0; i < 3; i++ )
-    {
-      hexaSetPos( 4 * i + 2, corrHeight - _STDHEIGHT_ );
-    }
-    delay( _STDBREAK_ );
-    for( i = 0; i < 3; i++ )
-    {
-      hexaSetPos( 4 * i + 1, int( hexaBack * corrStep ) );
-      hexaSetPos( 4 * i + 3, int( hexaFor * corrStep ) );
-    }
-    delay( _STDBREAK_ );
-    for( i = 0; i < 3; i++ )
-    {
-      hexaSetPos( 4 * i + 2, corrHeight );
-    }
-    delay( _STDBREAK_ );
+    highLeg = 1 - highLeg;
   }
 }
 
 void hexaRotate( double angle, double stepSize, int height )
 {
-  int i, hexaFor, hexaBack, corrHeight;
-  double absAngle, corrStep;
+  int i, j, hexaFor, hexaBack, corrHeight, highLeg;
+  double d, absAngle, corrStep;
 
   if( 0 > angle )
   {
@@ -248,6 +318,30 @@ void hexaRotate( double angle, double stepSize, int height )
     corrHeight = height;
   }
 
+  /* Determine which leg is high and cofirm home position */
+  if( g_hexaPos[0] > g_hexaPos[2] )
+  {
+    highLeg = 1;
+    for( i = 0; i < 3; i++)
+    {
+      hexaSetPos( 4 * i, corrHeight );
+      hexaSetPos( 4 * i + 1, 0 );
+      hexaSetPos( 4 * i + 2, corrHeight - _STDHEIGHT_ );
+      hexaSetPos( 4 * i + 3, 0 );
+    }
+  }
+  else
+  {
+    highLeg = 0;
+    for( i = 0; i < 3; i++ )
+    {
+      hexaSetPos( 4 * i, corrHeight - _STDHEIGHT_ );
+      hexaSetPos( 4 * i + 1, 0 );
+      hexaSetPos( 4 * i + 2, corrHeight );
+      hexaSetPos( 4 * i + 3, 0 );
+    }
+  }
+
   while( _ERRANGLE_ * _STEPANGLE_ < absAngle )
   {
     if( _STEPANGLE_ * corrStep > absAngle )
@@ -256,151 +350,71 @@ void hexaRotate( double angle, double stepSize, int height )
     }
     absAngle -= _STEPANGLE_ * corrStep;
     
-    for( i = 0; i < 3; i++)
+    if( 0 != highLeg )
     {
-      hexaSetPos( 4 * i, corrHeight - _STDHEIGHT_ );
+      for( i = 0; i < _NBSTEPS_; i++ )
+      {
+        d = i * 1.0 /_NBSTEPS_;
+        for( j = 0; j < 3; j++ )
+        {
+          hexaSetPos( 4 * j + 2, corrHeight - int( ( 1 - d ) * _STDHEIGHT_ ) );
+        }
+        hexaSetPos( 1, int( d * hexaFor * corrStep ) );
+        hexaSetPos( 3, int( d * hexaBack * corrStep ) );
+        hexaSetPos( 5, int( d * hexaFor * corrStep ) );
+        hexaSetPos( 7, int( d * hexaFor * corrStep ) );
+        hexaSetPos( 9, int( d * hexaBack * corrStep ) );
+        hexaSetPos( 11, int( d * hexaFor * corrStep ) );
+      }
+      for( i = _NBSTEPS_; i > 0; i-- )
+      {
+        d = i * 1.0 /_NBSTEPS_;
+     
+        for( j = 0; j < 3; j++ )
+        {
+          hexaSetPos( 4 * j, corrHeight - int( ( 1 - d ) * _STDHEIGHT_ ) );
+        }
+        hexaSetPos( 1, int( d * hexaFor * corrStep ) );
+        hexaSetPos( 3, int( d * hexaBack * corrStep ) );
+        hexaSetPos( 5, int( d * hexaFor * corrStep ) );
+        hexaSetPos( 7, int( d * hexaFor * corrStep ) );
+        hexaSetPos( 9, int( d * hexaBack * corrStep ) );
+        hexaSetPos( 11, int( d * hexaFor * corrStep ) );
+      }
     }
-    delay( _STDBREAK_ );
-    hexaSetPos( 1, hexaBack * corrStep );
-    hexaSetPos( 3, hexaFor * corrStep );
-    hexaSetPos( 5, hexaBack * corrStep );
-    hexaSetPos( 7, hexaBack * corrStep );
-    hexaSetPos( 9, hexaFor * corrStep );
-    hexaSetPos( 11, hexaBack * corrStep );
-    delay( _STDBREAK_ );
-    for( i = 0; i < 3; i++ )
+    else
     {
-      hexaSetPos( 4 * i, corrHeight );
+      for( i = 0; i < _NBSTEPS_; i++ )
+      {
+        d = i * 1.0 /_NBSTEPS_;
+        for( j = 0; j < 3; j++ )
+        {
+          hexaSetPos( 4 * j, corrHeight - int( ( 1 - d ) * _STDHEIGHT_ ) );
+        }
+        hexaSetPos( 1, int( d * hexaBack * corrStep ) );
+        hexaSetPos( 3, int( d * hexaFor * corrStep ) );
+        hexaSetPos( 5, int( d * hexaBack * corrStep ) );
+        hexaSetPos( 7, int( d * hexaBack * corrStep ) );
+        hexaSetPos( 9, int( d * hexaFor * corrStep ) );
+        hexaSetPos( 11, int( d * hexaBack * corrStep ) );
+      }
+      for( i = _NBSTEPS_; i > 0; i-- )
+      {
+        d = i * 1.0 /_NBSTEPS_;
+     
+        for( j = 0; j < 3; j++ )
+        {
+          hexaSetPos( 4 * j + 2, corrHeight - int( ( 1 - d ) * _STDHEIGHT_ ) );
+        }
+        hexaSetPos( 1, int( d * hexaBack * corrStep ) );
+        hexaSetPos( 3, int( d * hexaFor * corrStep ) );
+        hexaSetPos( 5, int( d * hexaBack * corrStep ) );
+        hexaSetPos( 7, int( d * hexaBack * corrStep ) );
+        hexaSetPos( 9, int( d * hexaFor * corrStep ) );
+        hexaSetPos( 11, int( d * hexaBack * corrStep ) );
+      }
     }
-    delay( _STDBREAK_ );
-
-    for( i = 0; i < 3; i++ )
-    {
-      hexaSetPos( 4 * i + 2, corrHeight - _STDHEIGHT_ );
-    }
-    delay( _STDBREAK_ );
-    hexaSetPos( 1, hexaFor * corrStep );
-    hexaSetPos( 3, hexaBack * corrStep );
-    hexaSetPos( 5, hexaFor * corrStep );
-    hexaSetPos( 7, hexaFor * corrStep );
-    hexaSetPos( 9, hexaBack * corrStep );
-    hexaSetPos( 11, hexaFor * corrStep );
-    delay( _STDBREAK_ );
-    for( i = 0; i < 3; i++ )
-    {
-      hexaSetPos( 4 * i + 2, corrHeight );
-    }
-    delay( _STDBREAK_ );
+    highLeg = 1 - highLeg;
   }
 }
 
-void hexaMove( double lenght, double curve, double stepSize, int height )
-{
-  int i, hexaFor, hexaBack, corrHeight;
-  double distance, corrStep, curveLeft, curveRight;
-
-  if( 0 > lenght )
-  {
-    distance = -lenght;
-    hexaFor = _PWMHMIN_;
-    hexaBack = _PWMHMAX_;
-  }
-  else
-  {
-    distance = lenght;
-    hexaFor = _PWMHMAX_;
-    hexaBack = _PWMHMIN_;
-  }
-
-  if( -1 > curve )
-  {
-    curveLeft = 0;
-    curveRight = 1;
-  }
-  else if( 0 > curve )
-  {
-    curveLeft = 0;
-    curveRight = -curve;
-  }
-  else if( 1 > curve )
-  {
-    curveLeft = curve;
-    curveRight = 0;
-  }
-  else
-  {
-    curveLeft = 1;
-    curveRight = 0;
-  }
-
-  if( 0 > stepSize )
-  {
-    corrStep = 0;
-  }
-  else if( 1 < stepSize )
-  {
-    corrStep = 1;
-  }
-  else
-  {
-    corrStep = stepSize;
-  }
-
-  if( _PWMVMIN_ + _STDHEIGHT_ > height )
-  {
-    corrHeight = _PWMVMIN_ + _STDHEIGHT_;
-  }
-  else if( _PWMVMAX_ < height )
-  {
-    corrHeight = _PWMVMAX_;
-  }
-  else
-  {
-    corrHeight = height;
-  }
-
-  while( _ERRLENGHT_ * _STEPLENGHT_ < distance )
-  {
-    if( _STEPLENGHT_ * corrStep > distance )
-    {
-      corrStep = distance / _STEPLENGHT_;
-    }
-    distance -= _STEPLENGHT_ * corrStep;
-    
-    for( i = 0; i < 3; i++)
-    {
-      hexaSetPos( 4 * i, corrHeight - _STDHEIGHT_ );
-    }
-    delay( _STDBREAK_ );
-    hexaSetPos( 1, hexaBack * corrStep * curveLeft );
-    hexaSetPos( 3, hexaFor * corrStep * curveLeft );
-    hexaSetPos( 5, hexaBack * corrStep * curveLeft );
-    hexaSetPos( 7, hexaFor * corrStep * curveRight );
-    hexaSetPos( 9, hexaBack * corrStep * curveRight );
-    hexaSetPos( 11, hexaFor * corrStep * curveRight );
-    delay( _STDBREAK_ );
-    for( i = 0; i < 3; i++ )
-    {
-      hexaSetPos( 4 * i, corrHeight );
-    }
-    delay( _STDBREAK_ );
-
-    for( i = 0; i < 3; i++ )
-    {
-      hexaSetPos( 4 * i + 2, corrHeight - _STDHEIGHT_ );
-    }
-    delay( _STDBREAK_ );
-    hexaSetPos( 1, hexaFor * corrStep * curveLeft );
-    hexaSetPos( 3, hexaBack * corrStep * curveLeft );
-    hexaSetPos( 5, hexaFor * corrStep * curveLeft );
-    hexaSetPos( 7, hexaBack * corrStep * curveRight );
-    hexaSetPos( 9, hexaFor * corrStep * curveRight );
-    hexaSetPos( 11, hexaBack * corrStep * curveRight );
-    delay( _STDBREAK_ );
-    for( i = 0; i < 3; i++ )
-    {
-      hexaSetPos( 4 * i + 2, corrHeight );
-    }
-    delay( _STDBREAK_ );
-  }
-}

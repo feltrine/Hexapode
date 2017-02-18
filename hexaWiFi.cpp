@@ -20,18 +20,19 @@ void waitInstr()
 
 void handleRoot() 
 {
+  hexaHoming();
   server.send(200, "text/html", "<h1>&emsp;&emsp;&emsp;&emsp;<a href=\"/up\">up</a><br/><a href=\"/left\">left</a>&emsp;<a href=\"/\">home</a>&emsp;<a href=\"/right\">right</a><br/>&emsp;&emsp;&emsp;<a href=\"/down\">down</a><br/></h1>");
 }
 
 void handleForward()
 {
-  hexaToward( 1, 1, 0 );
+  hexaMove( 1, 0, 1, 0 );
   server.send(200, "text/html", "<h1>&emsp;&emsp;&emsp;&emsp;<a href=\"/up\">up</a><br/><a href=\"/left\">left</a>&emsp;<a href=\"/\">home</a>&emsp;<a href=\"/right\">right</a><br/>&emsp;&emsp;&emsp;<a href=\"/down\">down</a><br/></h1>");
 }
 
 void handleBackward()
 {
-  hexaToward( -1, 1, 0 );
+  hexaMove( -1, 0, 1, 0 );
   server.send(200, "text/html", "<h1>&emsp;&emsp;&emsp;&emsp;<a href=\"/up\">up</a><br/><a href=\"/left\">left</a>&emsp;<a href=\"/\">home</a>&emsp;<a href=\"/right\">right</a><br/>&emsp;&emsp;&emsp;<a href=\"/down\">down</a><br/></h1>");
 }
 
